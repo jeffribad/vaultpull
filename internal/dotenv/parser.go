@@ -2,51 +2,57 @@ package dotenv
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strings"
 )
 
-// Parse reads a .env file and returns a map of key-value pairs.
-// Lines starting with '#' and blank lines are ignored.
-// Values may optionally be wrapped in double quotes.
-func Parse(filePath string) (map[string]string, error) {
-	f, err := os.Open(filePath)
+// Parse reads an existing .env file and returns a map of key-value pairs.
+// Lines starting with '#' are treated as comments and skipped.
+// Lines without '=' are also skipped.
+func Parse(path string) (map[string]string, error) {
+	f, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{}, nil
+		}
 		return nil, err
 	}
 	defer f.Close()
 
 	result := make(map[string]string)
 	scanner := bufio.NewScanner(f)
-	lineNum := 0
 
 	for scanner.Scan() {
-		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 
+		// Skip comments and empty lines
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid syntax at line %d: %q", lineNum, line)
+		idx := strings.Index(line, "=")
+		if idx < 0 {
+			continue
 		}
 
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
 
-		if strings.HasPrefix(val, `"`) && strings.HasSuffix(val, `"`) && len(val) >= 2 {
-			val = val[1 : len(val)-1]
-			val = strings.ReplaceAll(val, `\"`, `"`)
+		// Strip surrounding quotes if present
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') ||
+				(val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
 		}
 
-		result[key] = val
+		if key != "" {
+			result[key] = val
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning env file: %w", err)
+		return nil, err
 	}
 
 	return result, nil

@@ -53,7 +53,10 @@ func (b *Backup) Restore() error {
 	if err := os.WriteFile(b.OriginalPath, data, 0600); err != nil {
 		return fmt.Errorf("rollback: restore original file: %w", err)
 	}
-	return os.Remove(b.BackupPath)
+	if err := os.Remove(b.BackupPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("rollback: remove backup file: %w", err)
+	}
+	return nil
 }
 
 // Discard removes the backup file without restoring it.
@@ -61,5 +64,8 @@ func (b *Backup) Discard() error {
 	if b == nil {
 		return nil
 	}
-	return os.Remove(b.BackupPath)
+	if err := os.Remove(b.BackupPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("rollback: discard backup file: %w", err)
+	}
+	return nil
 }

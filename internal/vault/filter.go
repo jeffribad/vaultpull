@@ -2,20 +2,25 @@ package vault
 
 import "strings"
 
-// FilterByRole returns only the secrets whose keys match the allowed keys
-// defined for the given role. Role definitions map a role name to a set
-// of allowed secret key prefixes or exact names.
-//
-// If the role is not found in the definitions map, an empty map is returned.
-// An empty allowedKeys slice for a role means all secrets are permitted.
-func FilterByRole(secrets map[string]string, role string, roleDefs map[string][]string) map[string]string {
-	allowed, exists := roleDefs[role]
-	if !exists {
-		return map[string]string{}
+// RolePolicy defines which secret keys are accessible for a given role.
+type RolePolicy struct {
+	Role    string
+	Allowed []string // key prefixes or exact key names
+}
+
+// FilterByRole filters a secrets map based on the role's allowed keys.
+// If no policy is found for the role, all keys are returned.
+func FilterByRole(secrets map[string]string, role string, policies []RolePolicy) map[string]string {
+	var policy *RolePolicy
+	for i := range policies {
+		if strings.EqualFold(policies[i].Role, role) {
+			policy = &policies[i]
+			break
+		}
 	}
 
-	// Empty allowed list means the role has access to everything.
-	if len(allowed) == 0 {
+	if policy == nil {
+		// No policy found — return all secrets unchanged
 		result := make(map[string]string, len(secrets))
 		for k, v := range secrets {
 			result[k] = v
@@ -23,24 +28,23 @@ func FilterByRole(secrets map[string]string, role string, roleDefs map[string][]
 		return result
 	}
 
-	result := make(map[string]string)
-	for key, val := range secrets {
-		if matchesAny(key, allowed) {
-			result[key] = val
+	filtered := make(map[string]string)
+	for k, v := range secrets {
+		if matchesAny(k, policy.Allowed) {
+			filtered[k] = v
 		}
 	}
-	return result
+	return filtered
 }
 
-// matchesAny returns true if key equals or has a prefix matching any entry
-// in the patterns slice. Patterns ending with "*" are treated as prefix matches.
+// matchesAny returns true if the key matches any of the allowed patterns.
+// A pattern matches if the key equals it exactly or starts with it followed by "_".
 func matchesAny(key string, patterns []string) bool {
-	for _, p := range patterns {
-		if strings.HasSuffix(p, "*") {
-			if strings.HasPrefix(key, strings.TrimSuffix(p, "*")) {
-				return true
-			}
-		} else if key == p {
+	for _, pattern := range patterns {
+		if key == pattern {
+			return true
+		}
+		if strings.HasPrefix(key, pattern+"_") {
 			return true
 		}
 	}

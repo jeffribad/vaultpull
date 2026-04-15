@@ -1,69 +1,94 @@
 package sync
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/your-org/vaultpull/internal/audit"
-	"github.com/your-org/vaultpull/internal/dotenv"
-	"github.com/your-org/vaultpull/internal/vault"
+	"github.com/user/vaultpull/internal/audit"
+	"github.com/user/vaultpull/internal/dotenv"
+	"github.com/user/vaultpull/internal/vault"
 )
 
-// Options holds configuration for a sync operation.
-type Options struct {
-	Role       string
-	OutputPath string
-	Overwrite  bool
-	DryRun     bool
+// VaultClient is the interface required by Syncer to read secrets.
+type VaultClient interface {
+	ReadSecrets(ctx context.Context, path string) (map[string]string, error)
 }
 
-// Result summarises what happened during a sync.
-type Result struct {
-	Written  int
-	Skipped  int
-	FilePath string
-}
-
-// Syncer orchestrates fetching secrets from Vault and writing them to a .env file.
+// Syncer orchestrates reading secrets from Vault and writing them to a .env file.
 type Syncer struct {
-	client *vault.Client
-	logger *audit.Logger
+	client   VaultClient
+	policies map[string][]string
+	logger   *audit.Logger
 }
 
-// New creates a Syncer with the given Vault client and audit logger.
-func New(client *vault.Client, logger *audit.Logger) *Syncer {
-	return &Syncer{client: client, logger: logger}
+// New creates a new Syncer with the provided client, role policies, and audit logger.
+func New(client VaultClient, policies map[string][]string, logger *audit.Logger) *Syncer {
+	return &Syncer{
+		client:   client,
+		policies: policies,
+		logger:   logger,
+	}
 }
 
-// Run executes the sync pipeline: read → filter → write.
-func (s *Syncer) Run(secretPath string, policies vault.Policies, opts Options) (*Result, error) {
-	secrets, err := s.client.ReadSecrets(secretPath)
+// SyncOptions controls the behaviour of a sync operation.
+type SyncOptions struct {
+	SecretPath string
+	OutputPath string
+	Role       string
+	DryRun     bool
+	Overwrite  bool
+	Backup     bool
+}
+
+// Run executes the sync: fetch secrets, filter by role, optionally backup, then write.
+func (s *Syncer) Run(ctx context.Context, opts SyncOptions) (*Result, error) {
+	if opts.Role != "" {
+		if _, ok := s.policies[opts.Role]; !ok {
+			return nil, fmt.Errorf("unknown role %q: no policy defined", opts.Role)
+		}
+	}
+
+	secrets, err := s.client.ReadSecrets(ctx, opts.SecretPath)
 	if err != nil {
-		s.logger.LogError(fmt.Sprintf("vault read failed: %v", err))
-		return nil, fmt.Errorf("reading secrets: %w", err)
+		s.logger.LogError(opts.SecretPath, err)
+		return nil, fmt.Errorf("read secrets: %w", err)
 	}
 
-	filtered := vault.FilterByRole(secrets, opts.Role, policies)
-	if len(filtered) == 0 {
-		s.logger.LogError(fmt.Sprintf("no secrets matched role %q", opts.Role))
-		return nil, fmt.Errorf("no secrets available for role %q", opts.Role)
-	}
+	filtered := vault.FilterByRole(secrets, opts.Role, s.policies)
 
 	if opts.DryRun {
-		s.logger.LogSync(opts.Role, secretPath, len(filtered), true)
-		return &Result{Written: 0, Skipped: len(filtered), FilePath: opts.OutputPath}, nil
+		s.logger.LogSync(opts.SecretPath, opts.OutputPath, opts.Role, len(filtered), true)
+		return &Result{Written: 0, DryRun: true, Keys: keys(filtered)}, nil
+	}
+
+	var bak *Backup
+	if opts.Backup {
+		bak, err = CreateBackup(opts.OutputPath)
+		if err != nil {
+			return nil, fmt.Errorf("create backup: %w", err)
+		}
 	}
 
 	w, err := dotenv.NewWriter(opts.OutputPath, opts.Overwrite)
 	if err != nil {
-		return nil, fmt.Errorf("creating writer: %w", err)
+		_ = bak.Restore()
+		return nil, fmt.Errorf("open writer: %w", err)
 	}
 
-	n, err := w.Write(filtered)
-	if err != nil {
-		s.logger.LogError(fmt.Sprintf("write failed: %v", err))
-		return nil, fmt.Errorf("writing .env file: %w", err)
+	if err := w.Write(filtered); err != nil {
+		_ = bak.Restore()
+		return nil, fmt.Errorf("write secrets: %w", err)
 	}
 
-	s.logger.LogSync(opts.Role, secretPath, n, false)
-	return &Result{Written: n, FilePath: opts.OutputPath}, nil
+	_ = bak.Discard()
+	s.logger.LogSync(opts.SecretPath, opts.OutputPath, opts.Role, len(filtered), false)
+	return &Result{Written: len(filtered), DryRun: false, Keys: keys(filtered)}, nil
+}
+
+func keys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

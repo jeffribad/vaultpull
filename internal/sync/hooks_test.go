@@ -1,0 +1,82 @@
+package sync
+
+import (
+	"bytes"
+	"os"
+	"testing"
+)
+
+func TestHookRunner_RunPre_ExecutesCommand(t *testing.T) {
+	hooks := []Hook{
+		{Type: HookPreSync, Command: "echo pre-hook"},
+	}
+	r, w, _ := os.Pipe()
+	runner := NewHookRunner(hooks, w)
+
+	if err := runner.RunPre(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	w.Close()
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if buf.Len() == 0 {
+		t.Error("expected output from pre hook")
+	}
+}
+
+func TestHookRunner_RunPost_ExecutesCommand(t *testing.T) {
+	hooks := []Hook{
+		{Type: HookPostSync, Command: "echo post-hook"},
+	}
+	r, w, _ := os.Pipe()
+	runner := NewHookRunner(hooks, w)
+
+	if err := runner.RunPost(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	w.Close()
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	if buf.Len() == 0 {
+		t.Error("expected output from post hook")
+	}
+}
+
+func TestHookRunner_SkipsWrongType(t *testing.T) {
+	hooks := []Hook{
+		{Type: HookPostSync, Command: "false"},
+	}
+	runner := NewHookRunner(hooks, os.Stdout)
+	if err := runner.RunPre(); err != nil {
+		t.Fatalf("pre-sync should not run post-sync hooks, got %v", err)
+	}
+}
+
+func TestHookRunner_FailingCommand_ReturnsError(t *testing.T) {
+	hooks := []Hook{
+		{Type: HookPreSync, Command: "false"},
+	}
+	runner := NewHookRunner(hooks, os.Stdout)
+	if err := runner.RunPre(); err == nil {
+		t.Fatal("expected error from failing command")
+	}
+}
+
+func TestHookRunner_EmptyCommand_ReturnsError(t *testing.T) {
+	hooks := []Hook{
+		{Type: HookPreSync, Command: ""},
+	}
+	runner := NewHookRunner(hooks, os.Stdout)
+	if err := runner.RunPre(); err == nil {
+		t.Fatal("expected error for empty command")
+	}
+}
+
+func TestNewHookRunner_NilOut_DefaultsToStdout(t *testing.T) {
+	runner := NewHookRunner(nil, nil)
+	if runner.out == nil {
+		t.Error("expected non-nil output writer")
+	}
+}

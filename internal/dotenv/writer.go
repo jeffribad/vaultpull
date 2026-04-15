@@ -9,20 +9,22 @@ import (
 
 // Writer handles writing secrets to .env files.
 type Writer struct {
-	filePath string
+	filePath  string
 	overwrite bool
 }
 
 // NewWriter creates a new Writer targeting the given file path.
 func NewWriter(filePath string, overwrite bool) *Writer {
 	return &Writer{
-		filePath: filePath,
+		filePath:  filePath,
 		overwrite: overwrite,
 	}
 }
 
 // Write serializes the provided secrets map into a .env file.
-// Existing keys are preserved unless overwrite is true.
+// When overwrite is false, existing keys in the file are preserved and
+// only new keys from secrets are added. When overwrite is true, the file
+// is replaced entirely with the provided secrets.
 func (w *Writer) Write(secrets map[string]string) error {
 	existing := map[string]string{}
 
@@ -59,7 +61,9 @@ func (w *Writer) Write(secrets map[string]string) error {
 	return nil
 }
 
-// quoteValue wraps the value in double quotes if it contains spaces or special chars.
+// quoteValue wraps the value in double quotes if it contains spaces or special
+// characters that could be misinterpreted by env file parsers. Any existing
+// double-quote characters within the value are escaped before wrapping.
 func quoteValue(v string) string {
 	if strings.ContainsAny(v, " \t\n#") {
 		v = strings.ReplaceAll(v, `"`, `\"`)

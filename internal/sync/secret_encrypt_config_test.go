@@ -39,3 +39,14 @@ func TestEncryptConfigFromEnv_NumericEnabled(t *testing.T) {
 		t.Error("expected Enabled=true for value '1'")
 	}
 }
+
+func TestEncryptConfigFromEnv_FalseValues(t *testing.T) {
+	for _, val := range []string{"false", "0", "no", ""} {
+		os.Setenv("VAULTPULL_ENCRYPT_OUTPUT", val)
+		cfg := EncryptConfigFromEnv()
+		if cfg.Enabled {
+			t.Errorf("expected Enabled=false for value %q", val)
+		}
+	}
+	os.Unsetenv("VAULTPULL_ENCRYPT_OUTPUT")
+}

@@ -63,6 +63,17 @@ func TestRetryConfigFromEnv_MultiplierBelowOne_FallsBack(t *testing.T) {
 	}
 }
 
+// TestRetryConfigFromEnv_ZeroAttempts verifies that setting attempts to zero
+// falls back to the default, since zero retries would be nonsensical.
+func TestRetryConfigFromEnv_ZeroAttempts_FallsBack(t *testing.T) {
+	unsetRetryEnv(t)
+	t.Setenv("VAULTPULL_RETRY_ATTEMPTS", "0")
+	cfg := RetryConfigFromEnv()
+	if cfg.MaxAttempts != DefaultRetryConfig().MaxAttempts {
+		t.Errorf("expected default MaxAttempts for value 0, got %d", cfg.MaxAttempts)
+	}
+}
+
 func unsetRetryEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{

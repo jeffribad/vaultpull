@@ -65,5 +65,19 @@ func (h *HookRunner) execute(command string) error {
 	cmd := exec.Command(parts[0], parts[1:]...) //nolint:gosec
 	cmd.Stdout = h.out
 	cmd.Stderr = h.out
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("command %q exited with error: %w", parts[0], err)
+	}
+	return nil
+}
+
+// Count returns the number of hooks registered for the given type.
+func (h *HookRunner) Count(t HookType) int {
+	n := 0
+	for _, hook := range h.hooks {
+		if hook.Type == t {
+			n++
+		}
+	}
+	return n
 }

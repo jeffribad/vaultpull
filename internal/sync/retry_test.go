@@ -94,3 +94,11 @@ func TestWithRetry_ZeroMaxAttempts_RunsOnce(t *testing.T) {
 		t.Fatalf("expected 1 call with zero MaxAttempts, got %d", calls)
 	}
 }
+
+func TestRetryableError_Unwrap(t *testing.T) {
+	cause := errors.New("underlying cause")
+	err := &RetryableError{Cause: cause}
+	if !errors.Is(err, cause) {
+		t.Fatal("expected errors.Is to find the wrapped cause via Unwrap")
+	}
+}

@@ -9,21 +9,29 @@ import (
 )
 
 // WriteGroups writes each group of secrets to a separate .env file inside outDir.
-// Files are named <group>.env.
+// Files are named <group>.env. If overwrite is false, existing files are skipped.
 func WriteGroups(groups map[string]map[string]string, outDir string, overwrite bool) error {
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		return fmt.Errorf("creating output dir: %w", err)
 	}
 
 	for groupName, secrets := range groups {
-		filePath := filepath.Join(outDir, groupName+".env")
-		w, err := dotenv.NewWriter(filePath, overwrite)
-		if err != nil {
-			return fmt.Errorf("creating writer for group %s: %w", groupName, err)
+		if err := writeGroup(groupName, secrets, outDir, overwrite); err != nil {
+			return err
 		}
-		if err := w.Write(secrets); err != nil {
-			return fmt.Errorf("writing group %s: %w", groupName, err)
-		}
+	}
+	return nil
+}
+
+// writeGroup writes a single group of secrets to <outDir>/<groupName>.env.
+func writeGroup(groupName string, secrets map[string]string, outDir string, overwrite bool) error {
+	filePath := filepath.Join(outDir, groupName+".env")
+	w, err := dotenv.NewWriter(filePath, overwrite)
+	if err != nil {
+		return fmt.Errorf("creating writer for group %s: %w", groupName, err)
+	}
+	if err := w.Write(secrets); err != nil {
+		return fmt.Errorf("writing group %s: %w", groupName, err)
 	}
 	return nil
 }

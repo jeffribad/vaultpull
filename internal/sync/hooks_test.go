@@ -80,3 +80,27 @@ func TestNewHookRunner_NilOut_DefaultsToStdout(t *testing.T) {
 		t.Error("expected non-nil output writer")
 	}
 }
+
+func TestHookRunner_MultipleHooks_AllExecuted(t *testing.T) {
+	r, w, _ := os.Pipe()
+	hooks := []Hook{
+		{Type: HookPreSync, Command: "echo first"},
+		{Type: HookPreSync, Command: "echo second"},
+	}
+	runner := NewHookRunner(hooks, w)
+
+	if err := runner.RunPre(); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	w.Close()
+
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+	if !bytes.Contains([]byte(output), []byte("first")) {
+		t.Error("expected output from first hook")
+	}
+	if !bytes.Contains([]byte(output), []byte("second")) {
+		t.Error("expected output from second hook")
+	}
+}

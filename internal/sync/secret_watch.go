@@ -84,6 +84,12 @@ func detectChanges(keys []string, prev, next map[string]string) map[string]strin
 		for k := range next {
 			watch = append(watch, k)
 		}
+		// Also detect keys that were removed since the last snapshot.
+		for k := range prev {
+			if _, exists := next[k]; !exists {
+				watch = append(watch, k)
+			}
+		}
 	}
 	for _, k := range watch {
 		if next[k] != prev[k] {

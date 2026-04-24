@@ -68,6 +68,8 @@ func CoerceSecrets(secrets map[string]string, cfg CoerceConfig) map[string]strin
 	return out
 }
 
+// findKey looks up a key in m using exact match first, then case-insensitive
+// fallback. Returns the value and whether any match was found.
 func findKey(m map[string]string, key string) (string, bool) {
 	if v, ok := m[key]; ok {
 		return v, true
@@ -79,4 +81,10 @@ func findKey(m map[string]string, key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// HasCoercionKeys reports whether cfg declares any keys to coerce.
+// This is useful for skipping coercion setup when no keys are configured.
+func (cfg CoerceConfig) HasCoercionKeys() bool {
+	return len(cfg.BoolKeys) > 0 || len(cfg.NumberKeys) > 0 || len(cfg.JSONKeys) > 0
 }

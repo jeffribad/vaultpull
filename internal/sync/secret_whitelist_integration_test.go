@@ -11,10 +11,10 @@ func TestWhitelist_Integration_ConfigDriven(t *testing.T) {
 	cfg := WhitelistConfigFromEnv()
 
 	secrets := map[string]string{
-		"DB_HOST":      "localhost",
-		"DB_PORT":      "5432",
-		"API_KEY":      "supersecret",
-		"ADMIN_TOKEN":  "tok123",
+		"DB_HOST":     "localhost",
+		"DB_PORT":     "5432",
+		"API_KEY":     "supersecret",
+		"ADMIN_TOKEN": "tok123",
 	}
 
 	result := ApplyWhitelist(cfg, secrets)
@@ -49,5 +49,20 @@ func TestWhitelist_Integration_DisabledPassthrough(t *testing.T) {
 
 	if len(result) != 2 {
 		t.Errorf("expected all 2 keys to pass through when disabled, got %d", len(result))
+	}
+}
+
+// TestWhitelist_Integration_EmptySecrets verifies that applying a whitelist
+// to an empty secrets map returns an empty map rather than nil or an error.
+func TestWhitelist_Integration_EmptySecrets(t *testing.T) {
+	t.Setenv("VAULTPULL_WHITELIST_ENABLED", "true")
+	t.Setenv("VAULTPULL_WHITELIST_KEYS", "DB_HOST,DB_PORT")
+
+	cfg := WhitelistConfigFromEnv()
+
+	result := ApplyWhitelist(cfg, map[string]string{})
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 keys for empty input, got %d", len(result))
 	}
 }
